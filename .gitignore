@@ -1,0 +1,9 @@
+# binaries
+server
+
+# claude
+.claude/
+
+# frontend
+web/node_modules/
+web/.svelte-kit/
