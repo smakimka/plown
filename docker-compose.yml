@@ -1,0 +1,40 @@
+services:
+  app:
+    build: .
+    restart: unless-stopped
+    stop_grace_period: 10s
+    mem_limit: 512m
+    environment:
+      PG_ADDR: db:5432
+      PG_DB: games_db
+      PG_USER: plown
+      PG_PASS: plown-password
+    expose:
+      - "8080"
+    networks:
+      - frontend
+      - shared-db
+
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    stop_grace_period: 10s
+    mem_limit: 128m
+    ports:
+      - "443:443"
+      - "80:80"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    networks:
+      - frontend
+
+networks:
+  frontend:
+  shared-db:
+    external: true
+
+volumes:
+  caddy_data:
+  caddy_config:
