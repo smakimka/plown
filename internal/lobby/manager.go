@@ -24,7 +24,7 @@ func NewManager(l *slog.Logger, repo *repo.Postgres) *Manager {
 }
 
 func (m *Manager) CreateLobby() (*Lobby, error) {
-	id := generateID(8)
+	id := generateID(6)
 
 	l, err := New(m.l.With("lobby_id", id), id, m.repo)
 	if err != nil {
