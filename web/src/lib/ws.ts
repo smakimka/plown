@@ -2,6 +2,9 @@ import type { ServerMsg, TagCmd, GameCmd, RemoveTagCmd, FreeCmd, ReviewLabelCmd,
 
 export type MessageHandler = (msg: ServerMsg) => void;
 
+/** Emitted when the socket never opened — the lobby doesn't exist, so retrying is pointless. */
+export const ERR_LOBBY_NOT_FOUND = 'Lobby not found';
+
 export class LobbySocket {
 	private ws: WebSocket | null = null;
 	private handler: MessageHandler;
@@ -52,7 +55,7 @@ export class LobbySocket {
 		ws.onclose = () => {
 			if (!opened) {
 				// Connection failed (e.g. 404) — don't retry
-				this.handler({ type: 'error', msg: 'Lobby not found' });
+				this.handler({ type: 'error', msg: ERR_LOBBY_NOT_FOUND });
 				return;
 			}
 			this.onDisconnect?.();

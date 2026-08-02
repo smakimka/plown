@@ -3,6 +3,9 @@ package handler
 import (
 	"log/slog"
 	"net/http"
+	"os"
+	"path"
+	"path/filepath"
 
 	"plown/internal/lobby"
 	"plown/internal/repo"
@@ -11,23 +14,34 @@ import (
 )
 
 type Handler struct {
-	l             *slog.Logger
-	repo          *repo.Postgres
-	mgr           *lobby.Manager
+	l    *slog.Logger
+	repo *repo.Postgres
+	mgr  *lobby.Manager
+
+	staticDir     string
 	staticHandler http.Handler
 }
 
 func New(l *slog.Logger, repo *repo.Postgres, mgr *lobby.Manager, staticDir string) *Handler {
 	return &Handler{
-		l:             l,
-		repo:          repo,
-		mgr:           mgr,
+		l:    l,
+		repo: repo,
+		mgr:  mgr,
+
+		staticDir:     staticDir,
 		staticHandler: http.FileServer(http.Dir(staticDir)),
 	}
 }
 
 func (h *Handler) Static(w http.ResponseWriter, r *http.Request) {
-	h.staticHandler.ServeHTTP(w, r)
+	name := filepath.Join(h.staticDir, filepath.FromSlash(path.Clean("/"+r.URL.Path)))
+
+	if fi, err := os.Stat(name); err == nil && !fi.IsDir() {
+		h.staticHandler.ServeHTTP(w, r)
+		return
+	}
+
+	http.ServeFile(w, r, filepath.Join(h.staticDir, "index.html"))
 }
 
 func (h *Handler) CreateLobby(w http.ResponseWriter, r *http.Request) {

@@ -2,7 +2,7 @@
 	import { page } from '$app/stores';
 	import { onDestroy, onMount } from 'svelte';
 	import { fly } from 'svelte/transition';
-	import { LobbySocket } from '$lib/ws';
+	import { LobbySocket, ERR_LOBBY_NOT_FOUND } from '$lib/ws';
 	import type { Tag, Game, ServerMsg, TagCount, LabelCount } from '$lib/types';
 	import PlayerList from '$lib/components/PlayerList.svelte';
 	import FilterPanel from '$lib/components/FilterPanel.svelte';
@@ -10,10 +10,47 @@
 
 	const lobbyId = $page.params.id;
 
+	// --- Remembered name ---
+	// There is no GET for a lobby — joining is a ws 'join' event — so a reload
+	// always lands on the name prompt unless we remember the name ourselves.
+	// sessionStorage, not localStorage: it survives a reload but stays per-tab,
+	// so two tabs in the same lobby remain two distinct players.
+	const nameKey = `plown:lobby:${lobbyId}:name`;
+
+	function rememberedName(): string {
+		try {
+			return sessionStorage.getItem(nameKey) ?? '';
+		} catch {
+			return ''; // storage blocked — fall back to prompting
+		}
+	}
+
+	function rememberName(name: string) {
+		try {
+			sessionStorage.setItem(nameKey, name);
+		} catch {
+			// non-fatal: the user just gets prompted again next reload
+		}
+	}
+
+	function forgetName() {
+		try {
+			sessionStorage.removeItem(nameKey);
+		} catch {
+			// ignore
+		}
+	}
+
+	// Read once at init so phase, the prefilled input and the auto-join decision
+	// can't disagree
+	const initialName = rememberedName();
+
 	// --- Tags + labels (loaded once from HTTP) ---
 	let tags = $state<Tag[]>([]);
 	let labels = $state<string[]>([]);
 	onMount(async () => {
+		if (initialName) autoJoin();
+
 		const [tagsRes, labelsRes] = await Promise.all([
 			fetch('/api/tags'),
 			fetch('/api/labels')
@@ -24,11 +61,18 @@
 
 	// --- Phase ---
 	type Phase = 'name' | 'connecting' | 'active' | 'reconnecting';
-	let phase = $state<Phase>('name');
+	// Skip the prompt flash when we already know who we are
+	let phase = $state<Phase>(initialName ? 'connecting' : 'name');
 
 	// --- Name prompt ---
-	let nameInput = $state('');
+	let nameInput = $state(initialName);
 	let nameError = $state('');
+	// The server only drops the old player once it notices the closed socket, so
+	// a fast reload can race its own previous connection. Retry a rejected
+	// auto-join once before falling back to the prompt.
+	let autoJoining = false;
+	let autoJoinRetried = false;
+	let autoJoinTimer: ReturnType<typeof setTimeout> | null = null;
 
 	// --- Lobby state ---
 	let myName = $state('');
@@ -191,6 +235,9 @@
 		switch (msg.type) {
 			case 'joined':
 				myName = msg.msg.your_name;
+				rememberName(myName);
+				autoJoining = false;
+				autoJoinRetried = false;
 				phase = 'connecting';
 				break;
 
@@ -292,6 +339,17 @@
 				if (phase === 'connecting' || phase === 'name') {
 					socket?.close();
 					socket = null;
+
+					// Give a raced auto-join one more shot before bothering the user
+					if (autoJoining && !autoJoinRetried && msg.msg !== ERR_LOBBY_NOT_FOUND) {
+						autoJoinRetried = true;
+						autoJoinTimer = setTimeout(joinLobby, 700);
+						break;
+					}
+
+					// The remembered name was refused — prompt, prefilled for editing
+					forgetName();
+					autoJoining = false;
 					nameError = msg.msg;
 					phase = 'name';
 				}
@@ -311,11 +369,22 @@
 		socket = new LobbySocket(lobbyId, name, handleMsg, handleDisconnect);
 	}
 
+	/** Join with the name this tab already used for this lobby, no prompt. */
+	function autoJoin() {
+		autoJoining = true;
+		joinLobby();
+	}
+
 	function onNameKeydown(e: KeyboardEvent) {
 		if (e.key === 'Enter') joinLobby();
 	}
 
-	onDestroy(() => socket?.close());
+	onDestroy(() => {
+		// A pending retry would otherwise open a socket after teardown and join
+		// the lobby as a player nobody can see or close
+		if (autoJoinTimer) clearTimeout(autoJoinTimer);
+		socket?.close();
+	});
 
 	function applyTag(id: number, include: boolean) {
 		socket?.send({ type: 'tag', msg: { id, include } });

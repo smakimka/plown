@@ -20,7 +20,7 @@
 	}
 
 	function joinLobby() {
-		const id = joining.trim().toLowerCase();
+		const id = joining.trim();
 		if (id) goto(`/lobby/${id}`);
 	}
 
@@ -48,7 +48,6 @@
 					placeholder="Lobby code"
 					bind:value={joining}
 					onkeydown={onKeydown}
-					maxlength={6}
 					spellcheck={false}
 				/>
 				<button class="btn-secondary" onclick={joinLobby} disabled={!joining.trim()}>
@@ -168,7 +167,6 @@
 		color: var(--text);
 		font-size: 1rem;
 		outline: none;
-		text-transform: lowercase;
 		letter-spacing: 0.1em;
 		transition: border-color 0.15s;
 	}
