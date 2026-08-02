@@ -15,8 +15,8 @@
 
 	const DURATION = 4000;
 	// delta > 0 = pool shrank, delta < 0 = pool grew
-	const shrank = delta > 0;
-	const absDelta = Math.abs(delta);
+	const shrank = $derived(delta > 0);
+	const absDelta = $derived(Math.abs(delta));
 
 	onMount(() => {
 		const t = setTimeout(onDismiss, DURATION);

@@ -100,6 +100,7 @@
 		| { kind: 'tag'; id: number; name: string }
 		| { kind: 'label'; value: string };
 	let popover = $state<{ target: PopoverTarget; x: number; y: number } | null>(null);
+	let popoverEl = $state<HTMLElement | null>(null);
 
 	function openPopover(target: PopoverTarget, e: MouseEvent) {
 		if (!isMyTurn) return;
@@ -110,6 +111,14 @@
 
 	function closePopover() {
 		popover = null;
+	}
+
+	// Any click outside the popover dismisses it. Opening stops propagation, so
+	// the click that spawned the popover never reaches here.
+	function onWindowClick(e: MouseEvent) {
+		if (!popover) return;
+		if (popoverEl?.contains(e.target as Node)) return;
+		closePopover();
 	}
 
 	function popoverInclude() {
@@ -149,8 +158,7 @@
 	}
 </script>
 
-<!-- svelte-ignore a11y_no_static_element_interactions -->
-<svelte:window onclick={() => popover && closePopover()} onkeydown={(e) => e.key === 'Escape' && closePopover()} />
+<svelte:window onclick={onWindowClick} onkeydown={(e) => e.key === 'Escape' && closePopover()} />
 
 <div class="panel">
 	<!-- Applied filters strip -->
@@ -283,13 +291,12 @@
 
 <!-- Popover (portaled to body-level to avoid overflow clipping) -->
 {#if popover}
-	<!-- svelte-ignore a11y_no_static_element_interactions -->
-	<div class="popover-backdrop" onclick={closePopover}>
-		<!-- svelte-ignore a11y_no_static_element_interactions -->
+	<!-- Shields the page beneath; dismissal is handled by the window listener -->
+	<div class="popover-backdrop">
 		<div
+			bind:this={popoverEl}
 			class="popover"
 			style="left: {popover.x}px; top: {popover.y}px"
-			onclick={(e) => e.stopPropagation()}
 		>
 			<span class="popover-name">
 				{popover.target.kind === 'tag' ? popover.target.name : popover.target.value}

@@ -1,6 +1,6 @@
 <script lang="ts">
-	import { page } from '$app/stores';
-	import { onDestroy, onMount } from 'svelte';
+	import type { PageProps } from './$types';
+	import { onDestroy, onMount, untrack } from 'svelte';
 	import { fly } from 'svelte/transition';
 	import { LobbySocket, ERR_LOBBY_NOT_FOUND } from '$lib/ws';
 	import type { Tag, Game, ServerMsg, TagCount, LabelCount } from '$lib/types';
@@ -8,7 +8,13 @@
 	import FilterPanel from '$lib/components/FilterPanel.svelte';
 	import Toast from '$lib/components/Toast.svelte';
 
-	const lobbyId = $page.params.id;
+	// Route-scoped params: id is `string` here, unlike $page.params where it is
+	// optional because it is typed across every route.
+	// Read once on purpose — the socket, the storage key and the remembered name
+	// are all bound to one lobby per mount, so a lobby→lobby navigation would
+	// need a full teardown rather than a new id.
+	let { params }: PageProps = $props();
+	const lobbyId = untrack(() => params.id);
 
 	// --- Remembered name ---
 	// There is no GET for a lobby — joining is a ws 'join' event — so a reload
@@ -422,13 +428,20 @@
 		<div class="join-card">
 			<h2>Join Lobby</h2>
 			<p class="lobby-code">{lobbyId}</p>
+<!--
+				The name field is the only control on this card and the sole reason
+				the page is showing, so focusing it is the expected behaviour.
+				Deferring focus to JS instead would be the same thing hidden from
+				the linter, and the browser clears it again after load.
+			-->
+			<!-- svelte-ignore a11y_autofocus -->
 			<input
 				type="text"
 				placeholder="Your name"
+				autofocus
 				bind:value={nameInput}
 				onkeydown={onNameKeydown}
 				maxlength={32}
-				autofocus
 				spellcheck={false}
 			/>
 			{#if nameError}
